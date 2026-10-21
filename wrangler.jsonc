@@ -1,0 +1,39 @@
+{
+	"name": "url-shortener",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-03-01",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "url-shortener-db",
+			// デプロイ時は `npx wrangler d1 create url-shortener-db` で作成した ID に変更する
+			"database_id": "local-dev-db",
+			"migrations_dir": "migrations"
+		}
+	],
+	"vars": {
+		// Cloudflare Access のチームドメイン
+		"TEAM_DOMAIN": "your-team.cloudflareaccess.com",
+		// Cloudflare Access アプリケーションの Audience (AUD) タグ
+		"POLICY_AUD": "your-policy-aud-tag",
+		// 管理画面 (/admin) にアクセスできるメインドメイン
+		"MAIN_DOMAIN": "localhost"
+
+		// ── Cloudflare for SaaS（別アカウントのドメインを短縮ドメインにする場合）──
+		// CF_SAAS_ZONE_ID と secret の CF_SAAS_API_TOKEN が両方揃って初めて有効になる。
+		// どちらかが無ければ SaaS 連携は完全に無効で、Cloudflare API は呼ばれない。
+		// 詳細は README の「別 Cloudflare アカウントのドメインを追加する」を参照。
+		//
+		// "CF_SAAS_ZONE_ID": "<Cloudflare for SaaS を有効にしたゾーンの Zone ID>",
+		// "CF_SAAS_CNAME_TARGET": "service.example.net"
+		//
+		// CF_SAAS_API_TOKEN は secret なのでここには書かない（npx wrangler secret put CF_SAAS_API_TOKEN）。
+		// トークンに必要な権限: Zone / SSL and Certificates / Edit（対象は SaaS ゾーン）
+	}
+
+	// ── Cloudflare for SaaS を使う場合の Worker ルート ──
+	// カスタムホスト名のトラフィックは SaaS ゾーンを通るため、そのゾーンに
+	// ワイルドカードの *route* を張る（custom_domain: true では代替できない）。
+	//
+	// "routes": [{ "pattern": "*/*", "zone_name": "example.net" }]
+}

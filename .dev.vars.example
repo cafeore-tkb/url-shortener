@@ -1,0 +1,3 @@
+# ローカル開発用。`cp .dev.vars.example .dev.vars` でコピーして使う（.dev.vars はコミットしない）
+# 管理画面と API の Cloudflare Access 認証をバイパスする。本番では絶対に設定しないこと
+DEV_AUTH_BYPASS=true

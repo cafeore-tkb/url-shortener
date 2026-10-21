@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.log
+
+# エージェント用のローカル設定と skill（個人設定・第三者のコンテンツのためリポジトリには含めない）
+.agents/
+.claude/
+skills-lock.json
