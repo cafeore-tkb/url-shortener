@@ -125,10 +125,6 @@ curl -X POST https://MAIN_DOMAIN/api/domains \
 
 DNS ゾーンが**別の Cloudflare アカウント**にある、あるいは **Cloudflare を使っていない**ドメインを短縮ドメインにしたい場合は、[Cloudflare for SaaS](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/)（カスタムホスト名）を使います。相手側の作業は DNS レコードの追加だけで済み、Worker と D1 は 1 セットのまま運用できます。
 
-> **なぜ他の方法ではだめか**
-> - 相手アカウントに同じ Worker をデプロイする案は、**D1 がアカウントを跨いでバインドできない**ため DB が分裂します。
-> - 単に相手ドメインからこの Worker の Custom Domain へ CNAME を向けるだけでは、Cloudflare 側にそのホスト名の設定と証明書が無いため **動作しません**（SSL エラー / 1016）。カスタムホスト名の登録が必須です。
-
 ### 1. Cloudflare 側の初期セットアップ（1 回だけ・手動）
 
 1. SaaS ゾーン（例: `example.net`）で **Cloudflare for SaaS** を有効化する
