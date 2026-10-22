@@ -13,11 +13,11 @@
 	],
 	"vars": {
 		// Cloudflare Access のチームドメイン
-		"TEAM_DOMAIN": "your-team.cloudflareaccess.com",
+		"TEAM_DOMAIN": "throbbing-sun-831d.cloudflareaccess.com",
 		// Cloudflare Access アプリケーションの Audience (AUD) タグ
-		"POLICY_AUD": "your-policy-aud-tag",
+		"POLICY_AUD": "cc04ac84d1db1ee11c821631061386a818c6b5a24b679a1a3491784c55ed308a",
 		// 管理画面 (/admin) にアクセスできるメインドメイン
-		"MAIN_DOMAIN": "localhost"
+		"MAIN_DOMAIN": "aka.cafeore.cafe"
 
 		// ── Cloudflare for SaaS（別アカウントのドメインを短縮ドメインにする場合）──
 		// CF_SAAS_ZONE_ID と secret の CF_SAAS_API_TOKEN が両方揃って初めて有効になる。
@@ -35,5 +35,5 @@
 	// カスタムホスト名のトラフィックは SaaS ゾーンを通るため、そのゾーンに
 	// ワイルドカードの *route* を張る（custom_domain: true では代替できない）。
 	//
-	// "routes": [{ "pattern": "*/*", "zone_name": "example.net" }]
+	"routes": [{ "pattern": "aka.cafeore.cafe", "custom_domain": true }]
 }
