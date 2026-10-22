@@ -7,7 +7,7 @@
 			"binding": "DB",
 			"database_name": "url-shortener-db",
 			// デプロイ時は `npx wrangler d1 create url-shortener-db` で作成した ID に変更する
-			"database_id": "local-dev-db",
+			"database_id": "0bbbd654-ee79-4ad6-a628-fde1e8eacb70",
 			"migrations_dir": "migrations"
 		}
 	],
