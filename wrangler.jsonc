@@ -30,5 +30,11 @@
 		// CF_SAAS_API_TOKEN は secret なのでここには書かない（npx wrangler secret put CF_SAAS_API_TOKEN）。
 		// トークンに必要な権限: Zone / SSL and Certificates / Edit（対象は SaaS ゾーン）
 	},
+  	"observability": {
+    	"logs": {
+   	   		"enabled": false,
+      		"invocation_logs": true
+    	}
+  	},
 	"routes": [{ "pattern": "aka.cafeore.cafe", "custom_domain": true }]
 }
