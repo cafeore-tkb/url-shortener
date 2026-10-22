@@ -29,11 +29,6 @@
 		//
 		// CF_SAAS_API_TOKEN は secret なのでここには書かない（npx wrangler secret put CF_SAAS_API_TOKEN）。
 		// トークンに必要な権限: Zone / SSL and Certificates / Edit（対象は SaaS ゾーン）
-	}
-
-	// ── Cloudflare for SaaS を使う場合の Worker ルート ──
-	// カスタムホスト名のトラフィックは SaaS ゾーンを通るため、そのゾーンに
-	// ワイルドカードの *route* を張る（custom_domain: true では代替できない）。
-	//
+	},
 	"routes": [{ "pattern": "aka.cafeore.cafe", "custom_domain": true }]
 }
