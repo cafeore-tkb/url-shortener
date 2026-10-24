@@ -4,7 +4,7 @@ import type { PropsWithChildren } from "hono/jsx";
 /** 操作結果のメッセージ。POST → リダイレクト後の画面で 1 回だけ表示する */
 export type Flash = { kind: "ok" | "error"; message: string };
 
-export type AdminSection = "urls" | "folders" | "domains";
+export type AdminSection = "urls" | "folders" | "domains" | "import";
 
 const CSS = `
 :root{
@@ -29,8 +29,8 @@ a:hover{text-decoration:underline}
 .hdr{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
 .hdr h1{font-size:1.1rem;font-weight:600}
 .hdr h1 a{color:var(--fg)}
-.nav{display:flex;gap:4px}
-.nav a{padding:6px 14px;border-radius:var(--radius);font-size:.875rem;font-weight:500;color:var(--fg2);text-decoration:none}
+.nav{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.nav a{padding:6px 14px;border-radius:var(--radius);font-size:.875rem;font-weight:500;color:var(--fg2);text-decoration:none;white-space:nowrap}
 .nav a.active{background:var(--accent);color:#fff}
 .nav a:hover:not(.active){background:var(--bg3)}
 .wrap{max-width:1100px;margin:0 auto;padding:24px}
@@ -101,6 +101,10 @@ textarea{resize:vertical;min-height:60px}
 .folder-indent{display:inline-block}
 .folder-path{font-size:.75rem;color:var(--fg2)}
 .empty{text-align:center;padding:40px;color:var(--fg3);font-size:.9rem}
+.tbl tr.row-err td{background:rgba(220,38,38,.06)}
+.errs{color:var(--red);font-size:.75rem;padding-left:1.2em;line-height:1.5}
+.notes{font-size:.75rem;color:var(--fg2);margin-top:12px;padding-left:1.4em;line-height:1.7}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem}
 @media(max-width:768px){
 .tbl thead{display:none}
 .tbl tr{display:block;margin-bottom:12px;border:1px solid var(--border);border-radius:var(--radius);padding:8px}
@@ -154,6 +158,7 @@ const NAV: { section: AdminSection; href: string; label: string }[] = [
 	{ section: "urls", href: "/admin/urls", label: "短縮 URL" },
 	{ section: "folders", href: "/admin/folders", label: "フォルダ" },
 	{ section: "domains", href: "/admin/domains", label: "ドメイン" },
+	{ section: "import", href: "/admin/import", label: "CSV インポート" },
 ];
 
 export function Layout({

@@ -258,13 +258,42 @@ curl https://MAIN_DOMAIN/api/domains/go.other.com/hostname \
 | POST | `/admin/domains/:domain` | ドメインを更新 |
 | POST | `/admin/domains/:domain/refresh` | 外部ドメインのカスタムホスト名ステータスを再取得 |
 | POST | `/admin/domains/:domain/delete` | ドメインを削除 |
+| GET | `/admin/import` | CSV インポート（短縮 URL の一括作成）のアップロード画面 |
+| GET | `/admin/import/template.csv` | テンプレート CSV（見出し行だけの空の CSV）をダウンロード |
+| POST | `/admin/import` | CSV をアップロードして確認画面を表示（この時点では登録しない） |
+| POST | `/admin/import/commit` | 確認画面の内容を登録して結果画面を表示 |
+| POST | `/admin/import/result.csv` | 登録した短縮 URL を結果 CSV としてダウンロード |
 
-- データの読み書きは `/api/*` と同じハンドラーを内部から呼んで行うため、バリデーションと挙動は REST API と同じです。API が返すエラーメッセージ（英語）はそのまま表示します。
+- データの読み書きは `/api/*` と同じハンドラーを内部から呼んで行うため、バリデーションと挙動は REST API と同じです。API が返すエラーメッセージ（英語）はそのまま表示します。ただし CSV インポートだけは例外です（下記）。
 - URL の操作後は、操作前の一覧の絞り込み条件（`status` / `domain` / `folder_id` / `q` / `page`）に戻ります。
 - 有効期限などの日時は **日本時間（UTC+9）** で表示・入力します（D1 には UTC で保存）。
 - 別オリジンからのフォーム送信は `hono/csrf`（`Origin` / `Sec-Fetch-Site` の検証）で拒否します。
 - 他サイトの iframe への埋め込みは `X-Frame-Options: DENY` と CSP の `frame-ancestors 'none'` で禁止しています（クリックジャッキング対策）。
 - JavaScript は確認ダイアログ・クリップボードへのコピー・絞り込みの自動送信・410 ページのライブプレビューにだけ使っており、無効でもコピー以外の操作はできます。
+
+### CSV インポート
+
+「CSV インポート」画面で、CSV から短縮 URL をまとめて作成できます。アップロード → 確認画面 → 登録 → 結果画面の順に進み、確認画面で「登録」を押すまでは何も登録しません。
+
+1 行目に列名（見出し）を書き、2 行目から 1 行に 1 件ずつ書きます。列の順番は自由で、`url` 以外の列は省略できます。
+
+| 列名 | 必須 | 内容 |
+|------|------|------|
+| `url` | 必須 | 転送先 URL（http / https） |
+| `slug` | 任意 | スラッグ。空欄ならランダムに生成します（生成したスラッグは確認画面に表示します） |
+| `domain` | 任意 | 短縮 URL のドメイン（登録済みのもの）。空欄なら `MAIN_DOMAIN` |
+| `expires_at` | 任意 | 有効期限。`2026-12-31 23:59` や Excel が書き出す `2026/12/31 23:59` は日本時間、`2026-12-31T14:59:00Z` のようにタイムゾーンがあればそれに従います。日付だけは不可。空欄なら期限なし |
+| `note` | 任意 | メモ（500 文字まで） |
+| `folder` | 任意 | フォルダのパス（`親 / 子`）。空欄なら未分類。存在しないフォルダはエラー（自動では作りません） |
+
+- 文字コードは UTF-8（BOM 付き可）または Shift_JIS。Excel の「CSV UTF-8（コンマ区切り）」「CSV（コンマ区切り）」のどちらでも読み込めます。
+- 1 回に取り込めるのは 500 行・1 MB まで。
+- **1 行でもエラーがあると 1 件も登録しません**。エラーの行と理由を一覧で表示します。
+- 同じドメインに同じスラッグの URL がある場合（削除済みを含む）や、CSV の中でスラッグが重複している場合はエラーです。既存の URL は変更しません。
+- 登録時に検証し直すため、確認画面を出してから登録するまでの間に同じスラッグの URL が作られた場合もエラーになり、何も登録しません。登録を再送信しても二重には登録されません。
+- テンプレート CSV（見出し行だけ）と、登録した短縮 URL の結果 CSV（`short_url, url, slug, domain, expires_at, note, folder`）をダウンロードできます。どちらも Excel で文字化けしないよう BOM 付きの UTF-8 です。結果 CSV の日時は日本時間、フォルダはパスで書き出します。
+
+CSV インポートは、ほかの画面と違って `/api/*` を経由せず D1 を直接読み書きします（`src/lib/url-import.ts`）。`/api/shorten` を行数分呼ぶと 1 回の Worker 実行で発行できる D1 のクエリ数の上限（[Free: 50 / Paid: 1,000](https://developers.cloudflare.com/d1/platform/limits/)）にすぐ届くうえ、途中で失敗すると一部だけ登録された状態が残るためです。検証には `/api/shorten` と同じ関数を使い、登録は `db.batch()`（上限に対して 1 クエリと数えられ、1 つでも失敗すると全体がロールバックされる）で 1 回にまとめています。そのため REST API・Service Binding に一括作成のエンドポイントはありません。
 
 ## API エンドポイント
 
@@ -380,18 +409,20 @@ const res = await env.SHORTENER.fetch("https://s.example.com/api/shorten", {
 │   ├── types.ts              # Bindings, DomainRow, UrlRow, FolderRow, AppEnv 型定義
 │   ├── lib/
 │   │   ├── cloudflare-saas.ts # Cloudflare for SaaS (Custom Hostnames) API クライアント
+│   │   ├── csv.ts            # CSV の読み書き（RFC 4180）と文字コード判定（UTF-8 / Shift_JIS）
 │   │   ├── domain-cache.ts   # ドメイン設定のインメモリキャッシュ（TTL: 60秒）
 │   │   ├── errors.ts         # エラーレスポンスヘルパー
 │   │   ├── folders.ts        # フォルダのサブツリー取得（再帰 CTE）などのヘルパー
 │   │   ├── gone-page.ts      # 410 HTML レンダラー
 │   │   ├── slug-generator.ts # ランダムスラグ生成
+│   │   ├── url-import.ts     # 管理画面の CSV インポート（検証・一括登録・結果 CSV）
 │   │   └── validation.ts     # 入力バリデーションヘルパー
 │   ├── middleware/
 │   │   ├── auth.ts           # Cloudflare Access JWT 検証
 │   │   ├── csrf.ts           # /api/* の CSRF 対策（Origin / Sec-Fetch-Site の検証）
 │   │   └── domain.ts         # Host ヘッダーによるドメイン検索
 │   └── routes/
-│       ├── admin.tsx         # 管理画面のルート（/admin/urls, /admin/folders, /admin/domains など）
+│       ├── admin.tsx         # 管理画面のルート（/admin/urls, /admin/folders, /admin/domains, /admin/import など）
 │       ├── redirect.ts       # GET /:slug リダイレクトハンドラー
 │       └── api/
 │           ├── domains.ts    # ドメイン CRUD
