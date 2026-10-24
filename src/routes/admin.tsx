@@ -4,7 +4,20 @@ import { csrf } from "hono/csrf";
 import { createMiddleware } from "hono/factory";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { type ApiRequestOptions, type ApiResult, callApi, createApiApp } from "../internal-api";
+import { CSV_BOM, decodeCsv, formatCsv } from "../lib/csv";
 import { notFound } from "../lib/errors";
+import {
+	IMPORT_COLUMNS,
+	MAX_IMPORT_BYTES,
+	MAX_IMPORT_ROWS,
+	applySlugs,
+	assignSlugs,
+	generatedSlugsField,
+	insertImport,
+	readImportCsv,
+	resultCsv,
+	validateImport,
+} from "../lib/url-import";
 import type { AppEnv, UrlRow } from "../types";
 import {
 	type DomainCreateValues,
@@ -13,6 +26,7 @@ import {
 	DomainsPage,
 } from "../views/admin/domains";
 import { FolderEditPage, type FolderValues, FoldersPage } from "../views/admin/folders";
+import { ImportPage, ImportPreviewPage, ImportResultPage } from "../views/admin/import";
 import type { Flash } from "../views/admin/layout";
 import { parseJstInput } from "../views/admin/time";
 import {
@@ -471,6 +485,114 @@ app.post("/folders/:id/delete", async (c) => {
 			? { kind: "ok", message: "フォルダを削除しました。中の URL は未分類に戻りました。" }
 			: { kind: "error", message: `削除できませんでした: ${result.error}` },
 	);
+});
+
+// ── CSV インポート ──
+// /api/* を経由せず D1 を直接使う（理由は src/lib/url-import.ts を参照）。
+
+function renderImport(c: AdminContext, error?: string, code = 200): Response | Promise<Response> {
+	return c.html(
+		<ImportPage mainDomain={c.env.MAIN_DOMAIN} flash={takeFlash(c)} error={error} />,
+		status(code),
+	);
+}
+
+function csvDownload(c: AdminContext, filename: string, csv: string): Response {
+	c.header("Content-Type", "text/csv; charset=utf-8");
+	c.header("Content-Disposition", `attachment; filename="${filename}"`);
+	return c.body(`${CSV_BOM}${csv}`);
+}
+
+app.get("/import", (c) => renderImport(c));
+
+app.get("/import/template.csv", (c) =>
+	csvDownload(c, "url-import-template.csv", formatCsv([[...IMPORT_COLUMNS]])),
+);
+
+app.post("/import", async (c) => {
+	const body = await c.req.parseBody();
+	const file = body.file;
+	if (!(file instanceof File) || file.size === 0) {
+		return renderImport(c, "CSV ファイルを選択してください。", 400);
+	}
+	if (file.size > MAX_IMPORT_BYTES) {
+		return renderImport(c, "ファイルが大きすぎます。1 MB までにしてください。", 400);
+	}
+	const decoded = decodeCsv(await file.arrayBuffer());
+	if (!decoded.ok) {
+		return renderImport(c, decoded.error, 400);
+	}
+	const read = readImportCsv(decoded.text);
+	if (!read.ok) {
+		return renderImport(c, read.error, 400);
+	}
+	const rows = await validateImport(c.env.DB, read.inputs, c.env.MAIN_DOMAIN);
+	if (rows.some((r) => r.errors.length > 0)) {
+		return c.html(<ImportPreviewPage rows={rows} csv={decoded.text} slugs="" />, 400);
+	}
+	const assigned = await assignSlugs(c.env.DB, rows);
+	return c.html(
+		<ImportPreviewPage
+			rows={rows}
+			csv={decoded.text}
+			slugs={generatedSlugsField(rows)}
+			error={assigned.ok ? undefined : assigned.error}
+		/>,
+		assigned.ok ? 200 : 500,
+	);
+});
+
+/**
+ * 確認画面からの登録。CSV と自動生成したスラッグを読み直して検証し、問題が無ければ登録して
+ * 結果画面を返す。結果画面を出すためリダイレクトはしないが、再送信しても全行が
+ * 「既に使われています」になるだけで二重には登録されない。
+ */
+app.post("/import/commit", async (c) => {
+	const field = await formFields(c);
+	const csv = field("csv");
+	// アップロード時の上限を超える長さは受け付けない（文字数はバイト数以下）
+	if (csv === "" || csv.length > MAX_IMPORT_BYTES) {
+		return renderImport(c, "CSV をアップロードし直してください。", 400);
+	}
+	const read = readImportCsv(csv);
+	if (!read.ok) {
+		return renderImport(c, read.error, 400);
+	}
+	if (!applySlugs(read.inputs, field("slugs"))) {
+		return renderImport(
+			c,
+			"確認画面の内容が CSV と合いません。アップロードし直してください。",
+			400,
+		);
+	}
+	const rows = await validateImport(c.env.DB, read.inputs, c.env.MAIN_DOMAIN);
+	const slugs = generatedSlugsField(rows);
+	if (rows.some((r) => r.errors.length > 0)) {
+		return c.html(<ImportPreviewPage rows={rows} csv={csv} slugs={slugs} />, 400);
+	}
+	const result = await insertImport(c.env.DB, rows);
+	if (!result.ok) {
+		return c.html(
+			<ImportPreviewPage rows={rows} csv={csv} slugs={slugs} error={result.error} />,
+			409,
+		);
+	}
+	return c.html(<ImportResultPage rows={rows} />);
+});
+
+/** 結果画面から、作成した URL（"ドメイン/スラッグ" を 1 行に 1 つ）を CSV でダウンロードする */
+app.post("/import/result.csv", async (c) => {
+	const field = await formFields(c);
+	const keys = field("urls")
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter((line) => line !== "")
+		.slice(0, MAX_IMPORT_ROWS)
+		.flatMap((line) => {
+			const i = line.indexOf("/");
+			return i > 0 ? [{ domain: line.slice(0, i), slug: line.slice(i + 1) }] : [];
+		});
+	return csvDownload(c, "url-import-result.csv", await resultCsv(c.env.DB, keys));
 });
 
 // ── ドメイン ──
